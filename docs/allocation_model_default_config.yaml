@@ -1,0 +1,98 @@
+project_name: allocation_model_v1
+random_seed: 42
+
+universe:
+  tickers: []
+  include_cash: true
+  cash_ticker: CASH
+  max_single_name_weight: 0.25
+  long_only: true
+  leverage_allowed: false
+  shorting_allowed: false
+
+calendar:
+  exchange: XNYS
+  timezone: America/New_York
+  signal_cutoff_time: "18:00"
+
+execution:
+  price_convention: next_open
+  rebalance_band: 0.02
+  partial_rebalance_alpha: 0.50
+
+horizons:
+  primary: 20
+  optional: [5, 60]
+
+features:
+  return_windows: [1, 5, 20, 60, 120]
+  vol_windows: [5, 20, 60, 120]
+  dd_windows: [20, 60, 120]
+  beta_windows: [60, 120]
+  corr_windows: [20, 60]
+  liquidity_windows: [20, 60]
+  pca_components: 3
+
+candidate_search:
+  dirichlet_candidates_per_day: 5000
+  dirichlet_alpha_mix: [0.05, 0.20, 1.0, 5.0]
+  top_k: 20
+  local_perturbations_per_seed: 100
+  deterministic_candidates:
+    - prev_live
+    - prev_target
+    - equal_weight
+    - cash_only
+    - inverse_vol
+    - min_variance
+
+teacher_objective:
+  lambda_turnover: 1.0
+  lambda_cost: 1.0
+  lambda_concentration: 0.10
+  epsilon: 1.0e-8
+
+cost_model:
+  commission_bps: 0.0
+  regulatory_bps: 0.0
+  spread_bps_proxy_default: 2.0
+  adv_floor: 100000.0
+  impact_coeff: 10.0
+  liquidity_buckets:
+    - {adv_min: 0, adv_max: 1000000, spread_bps_proxy: 10.0}
+    - {adv_min: 1000000, adv_max: 10000000, spread_bps_proxy: 5.0}
+    - {adv_min: 10000000, adv_max: 1.0e20, spread_bps_proxy: 2.0}
+
+splits:
+  train_frac: 0.70
+  val_frac: 0.15
+  test_frac: 0.15
+  walkforward_train_years: 5
+  walkforward_val_years: 1
+  walkforward_test_years: 1
+  purge_days: 120
+
+model:
+  direct_weight_model:
+    kind: gbm
+    learning_rate: 0.03
+    max_depth: 6
+    num_leaves: 64
+    n_estimators: 500
+    temperature: 1.0
+    l2_weight_change_penalty: 0.01
+    use_confidence_weights: true
+  utility_model:
+    enabled: true
+    hidden_dim: 128
+    num_layers: 3
+    dropout: 0.10
+
+training:
+  early_stopping_rounds: 50
+  objective_metric: validation_net_sharpe
+  secondary_metrics: [validation_max_drawdown, validation_turnover, validation_kl]
+
+reporting:
+  generate_html_reports: true
+  generate_plots: true
