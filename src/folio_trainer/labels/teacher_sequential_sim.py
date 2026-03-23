@@ -175,7 +175,10 @@ def run_sequential_simulation(
         top_k_objectives = scores["objective_total"][top_k_indices]
 
         hard_target = candidates[ranking[0]]
-        soft_target, confidence = distill_top_k(top_k_weights, top_k_objectives)
+        soft_target, confidence = distill_top_k(
+            top_k_weights, top_k_objectives,
+            temperature=candidate_config.distillation_temperature,
+        )
 
         label_rows.append({
             "asof_date": date,

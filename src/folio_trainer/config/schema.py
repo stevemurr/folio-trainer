@@ -5,6 +5,46 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, model_validator
 
 
+# ---------------------------------------------------------------------------
+# Strategy profiles
+# ---------------------------------------------------------------------------
+
+
+class StrategyProfileConfig(BaseModel):
+    """Parameter overrides for a named strategy profile."""
+
+    lambda_turnover: float | None = None
+    lambda_cost: float | None = None
+    lambda_concentration: float | None = None
+    distillation_temperature: float | None = None
+    inference_temperature: float | None = None
+
+
+BUILTIN_STRATEGY_PROFILES: dict[str, StrategyProfileConfig] = {
+    "aggressive": StrategyProfileConfig(
+        lambda_turnover=0.05,
+        lambda_cost=0.30,
+        lambda_concentration=0.0,
+        distillation_temperature=0.05,
+        inference_temperature=0.20,
+    ),
+    "neutral": StrategyProfileConfig(
+        lambda_turnover=0.20,
+        lambda_cost=1.0,
+        lambda_concentration=0.0,
+        distillation_temperature=0.10,
+        inference_temperature=0.30,
+    ),
+    "conservative": StrategyProfileConfig(
+        lambda_turnover=0.50,
+        lambda_cost=2.0,
+        lambda_concentration=0.30,
+        distillation_temperature=0.15,
+        inference_temperature=0.40,
+    ),
+}
+
+
 class UniverseConfig(BaseModel):
     tickers: list[str] = Field(default_factory=list)
     include_cash: bool = True
@@ -23,7 +63,7 @@ class CalendarConfig(BaseModel):
 
 class ExecutionConfig(BaseModel):
     price_convention: str = "next_open"
-    rebalance_band: float = 0.02
+    rebalance_band: float = 0.005
     partial_rebalance_alpha: float = 0.50
 
 
@@ -49,8 +89,10 @@ class FeaturesConfig(BaseModel):
 class CandidateSearchConfig(BaseModel):
     dirichlet_candidates_per_day: int = 5000
     dirichlet_alpha_mix: list[float] = Field(default_factory=lambda: [0.05, 0.20, 1.0, 5.0])
-    top_k: int = 20
+    top_k: int = 5
+    distillation_temperature: float = 0.10
     local_perturbations_per_seed: int = 100
+    sparse_k_assets: int = 30
     deterministic_candidates: list[str] = Field(
         default_factory=lambda: [
             "prev_live",
@@ -64,9 +106,9 @@ class CandidateSearchConfig(BaseModel):
 
 
 class TeacherObjectiveConfig(BaseModel):
-    lambda_turnover: float = 1.0
+    lambda_turnover: float = 0.20
     lambda_cost: float = 1.0
-    lambda_concentration: float = 0.10
+    lambda_concentration: float = 0.0
     epsilon: float = 1e-8
 
 
@@ -122,7 +164,7 @@ class DirectWeightModelConfig(BaseModel):
     max_depth: int = 6
     num_leaves: int = 64
     n_estimators: int = 500
-    temperature: float = 1.0
+    temperature: float = 0.30
     l2_weight_change_penalty: float = 0.01
     use_confidence_weights: bool = True
 
@@ -161,6 +203,8 @@ class PipelineConfig(BaseModel):
 
     project_name: str = "allocation_model_v1"
     random_seed: int = 42
+    strategy: str | None = None
+    custom_profiles: dict[str, StrategyProfileConfig] = Field(default_factory=dict)
     universe: UniverseConfig = Field(default_factory=UniverseConfig)
     calendar: CalendarConfig = Field(default_factory=CalendarConfig)
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)

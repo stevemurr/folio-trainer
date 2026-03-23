@@ -1,6 +1,21 @@
 project_name: allocation_model_v1
 random_seed: 42
 
+# Strategy profile: set to use a named profile that adjusts teacher lambdas
+# and temperatures for different risk/return tradeoffs.
+# Built-in profiles: aggressive, neutral, conservative
+# Any explicit values in sections below will override the profile.
+# strategy: neutral
+
+# Custom profiles (define your own lambda/temperature bundles):
+# custom_profiles:
+#   my_strategy:
+#     lambda_turnover: 0.10
+#     lambda_cost: 0.50
+#     lambda_concentration: 0.15
+#     distillation_temperature: 0.08
+#     inference_temperature: 0.25
+
 universe:
   tickers: []
   include_cash: true
@@ -17,7 +32,7 @@ calendar:
 
 execution:
   price_convention: next_open
-  rebalance_band: 0.02
+  rebalance_band: 0.005
   partial_rebalance_alpha: 0.50
 
 horizons:
@@ -36,8 +51,10 @@ features:
 candidate_search:
   dirichlet_candidates_per_day: 5000
   dirichlet_alpha_mix: [0.05, 0.20, 1.0, 5.0]
-  top_k: 20
+  top_k: 5
+  distillation_temperature: 0.10
   local_perturbations_per_seed: 100
+  sparse_k_assets: 30
   deterministic_candidates:
     - prev_live
     - prev_target
@@ -47,9 +64,9 @@ candidate_search:
     - min_variance
 
 teacher_objective:
-  lambda_turnover: 1.0
+  lambda_turnover: 0.20
   lambda_cost: 1.0
-  lambda_concentration: 0.10
+  lambda_concentration: 0.0
   epsilon: 1.0e-8
 
 cost_model:
@@ -79,7 +96,7 @@ model:
     max_depth: 6
     num_leaves: 64
     n_estimators: 500
-    temperature: 1.0
+    temperature: 0.30
     l2_weight_change_penalty: 0.01
     use_confidence_weights: true
   utility_model:

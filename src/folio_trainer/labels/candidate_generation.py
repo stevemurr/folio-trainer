@@ -55,13 +55,19 @@ def generate_candidates(
             w = project_to_simplex(w, weight_caps)
             candidates.append(w)
 
-    # 2. Dirichlet random candidates
+    # 2. Sparse Dirichlet random candidates
+    # Instead of spreading weights across all assets, randomly select a subset
+    # of K assets per candidate and allocate weights only among those.
+    sparse_k = min(config.sparse_k_assets, n_assets)
     n_per_alpha = config.dirichlet_candidates_per_day // len(config.dirichlet_alpha_mix)
     for alpha_val in config.dirichlet_alpha_mix:
-        alpha = np.full(n_assets, alpha_val)
-        samples = rng.dirichlet(alpha, size=n_per_alpha)  # (n_per_alpha, n_assets)
-        for s in samples:
-            candidates.append(project_to_simplex(s, weight_caps))
+        for _ in range(n_per_alpha):
+            chosen = rng.choice(n_assets, size=sparse_k, replace=False)
+            alpha = np.full(sparse_k, alpha_val)
+            sub_weights = rng.dirichlet(alpha)
+            w = np.zeros(n_assets)
+            w[chosen] = sub_weights
+            candidates.append(project_to_simplex(w, weight_caps))
 
     # 3. Local perturbations around top deterministic seeds
     det_candidates = candidates[: len(config.deterministic_candidates)]
