@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "folio-trainer"
 version = "0.1.0"
 description = "Point-in-time daily predictive asset allocation pipeline"
-readme = "docs/allocation_model_spec.md"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "polars>=1.0",
