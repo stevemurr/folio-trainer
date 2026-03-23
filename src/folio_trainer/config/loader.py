@@ -60,6 +60,12 @@ def resolve_strategy_profile(
         result.setdefault("model", {}).setdefault("direct_weight_model", {})[
             "temperature"
         ] = profile.inference_temperature
+    if profile.rebalance_band is not None:
+        result.setdefault("execution", {})["rebalance_band"] = profile.rebalance_band
+    if profile.partial_rebalance_alpha is not None:
+        result.setdefault("execution", {})[
+            "partial_rebalance_alpha"
+        ] = profile.partial_rebalance_alpha
 
     return result
 
@@ -124,6 +130,18 @@ def load_config(
     if effective_strategy:
         merged["strategy"] = effective_strategy
 
+    return PipelineConfig.model_validate(merged)
+
+
+def apply_strategy_profile(
+    config: PipelineConfig,
+    strategy: str,
+) -> PipelineConfig:
+    """Apply a named strategy profile to an existing validated config."""
+    merged = config.model_dump()
+    profile_overrides = resolve_strategy_profile(strategy, config.custom_profiles)
+    merged = _deep_merge(merged, profile_overrides)
+    merged["strategy"] = strategy
     return PipelineConfig.model_validate(merged)
 
 

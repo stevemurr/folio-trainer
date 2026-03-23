@@ -100,6 +100,8 @@ def test_builtin_strategy_aggressive():
     assert cfg.teacher_objective.lambda_concentration == 0.0
     assert cfg.candidate_search.distillation_temperature == 0.05
     assert cfg.model.direct_weight_model.temperature == 0.20
+    assert cfg.execution.rebalance_band == 0.0025
+    assert cfg.execution.partial_rebalance_alpha == 0.75
 
 
 def test_builtin_strategy_conservative():
@@ -110,6 +112,8 @@ def test_builtin_strategy_conservative():
     assert cfg.teacher_objective.lambda_concentration == 0.30
     assert cfg.candidate_search.distillation_temperature == 0.15
     assert cfg.model.direct_weight_model.temperature == 0.40
+    assert cfg.execution.rebalance_band == 0.02
+    assert cfg.execution.partial_rebalance_alpha == 0.25
 
 
 def test_strategy_neutral_matches_defaults():
@@ -122,6 +126,8 @@ def test_strategy_neutral_matches_defaults():
     assert cfg_neutral.teacher_objective.lambda_concentration == cfg_none.teacher_objective.lambda_concentration
     assert cfg_neutral.candidate_search.distillation_temperature == cfg_none.candidate_search.distillation_temperature
     assert cfg_neutral.model.direct_weight_model.temperature == cfg_none.model.direct_weight_model.temperature
+    assert cfg_neutral.execution.rebalance_band == cfg_none.execution.rebalance_band
+    assert cfg_neutral.execution.partial_rebalance_alpha == cfg_none.execution.partial_rebalance_alpha
 
 
 def test_explicit_override_wins_over_profile():
@@ -145,6 +151,7 @@ def test_custom_profile():
                 "lambda_turnover": 0.12,
                 "lambda_cost": 0.75,
                 "inference_temperature": 0.25,
+                "rebalance_band": 0.03,
             },
         },
     })
@@ -152,6 +159,7 @@ def test_custom_profile():
     assert cfg.teacher_objective.lambda_turnover == 0.12
     assert cfg.teacher_objective.lambda_cost == 0.75
     assert cfg.model.direct_weight_model.temperature == 0.25
+    assert cfg.execution.rebalance_band == 0.03
     # Unset profile fields keep defaults
     assert cfg.teacher_objective.lambda_concentration == 0.0
 

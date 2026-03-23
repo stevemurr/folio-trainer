@@ -12,25 +12,29 @@ import polars as pl
 from folio_trainer.backtest.metrics import compute_metrics, metrics_to_dict
 from folio_trainer.backtest.simulator import simulate
 from folio_trainer.config.schema import PipelineConfig
-from folio_trainer.models.direct_weight_gbm import DirectWeightGBM
+from folio_trainer.models.dataset import stack_by_date
+from folio_trainer.models.factory import create_direct_weight_model
 
 logger = logging.getLogger(__name__)
 
 
 def evaluate_walkforward(
-    features: pl.DataFrame,
+    asset_features: pl.DataFrame,
     labels: pl.DataFrame,
     returns_by_date: dict,
     splits: pl.DataFrame,
     config: PipelineConfig,
     ticker_order: list[str],
+    market_features: pl.DataFrame | None = None,
+    cross_asset_features: pl.DataFrame | None = None,
+    calendar_dates: list | None = None,
     output_dir: str | Path | None = None,
 ) -> dict:
     """Run walk-forward evaluation with per-fold retraining.
 
     Parameters
     ----------
-    features
+    asset_features
         Full asset feature table.
     labels
         Full teacher label table.
@@ -79,13 +83,20 @@ def evaluate_walkforward(
             continue
 
         try:
-            dataset = prepare_dataset(features, labels, fold_splits, ticker_order)
+            dataset = prepare_dataset(
+                asset_features=asset_features,
+                labels=labels,
+                splits=fold_splits,
+                ticker_order=ticker_order,
+                market_features=market_features,
+                cross_asset_features=cross_asset_features,
+                calendar_dates=calendar_dates,
+            )
         except Exception as e:
             logger.warning("Failed to prepare dataset for fold %s: %s", fold_id, e)
             continue
 
-        # Train model for this fold
-        model = DirectWeightGBM(config.model.direct_weight_model)
+        model = create_direct_weight_model(config.model.direct_weight_model)
         try:
             model.train(
                 X_train=dataset.X_train,
@@ -95,35 +106,29 @@ def evaluate_walkforward(
                 y_val=dataset.y_val,
                 w_val=dataset.w_val,
                 feature_names=dataset.feature_names,
+                train_date_indices=dataset.train_date_indices,
+                val_date_indices=dataset.val_date_indices,
+                target_weights_train=dataset.target_weight_train,
+                target_weights_val=dataset.target_weight_val,
             )
         except Exception as e:
             logger.warning("Training failed for fold %s: %s", fold_id, e)
             continue
 
-        # Predict on test
         test_weights = model.predict_weights(dataset.X_test, dataset.test_date_indices)
         n_assets = len(ticker_order)
-        unique_dates = sorted(set(dataset.test_dates))
-        n_dates = len(unique_dates)
+        weight_matrix = stack_by_date(test_weights, dataset.test_date_indices, n_assets)
+        n_dates = len(dataset.test_prediction_dates)
 
-        weight_matrix = np.zeros((n_dates, n_assets))
-        for i, d_idx in enumerate(np.unique(dataset.test_date_indices)):
-            mask = dataset.test_date_indices == d_idx
-            w = test_weights[mask]
-            if len(w) >= n_assets:
-                weight_matrix[i] = w[:n_assets]
-
-        # Build returns matrix for test dates
         test_returns = np.zeros((n_dates, n_assets))
-        for i, d in enumerate(unique_dates):
+        for i, d in enumerate(dataset.test_prediction_dates):
             if d in returns_by_date:
                 test_returns[i] = returns_by_date[d]
 
-        # Backtest
         bt_result = simulate(
             weight_signals=weight_matrix,
             asset_returns=test_returns,
-            dates=unique_dates,
+            dates=dataset.test_prediction_dates,
             execution_config=config.execution,
             cost_config=config.cost_model,
         )
@@ -131,8 +136,8 @@ def evaluate_walkforward(
 
         fold_results.append({
             "fold": fold_id,
-            "test_start": str(unique_dates[0]) if unique_dates else None,
-            "test_end": str(unique_dates[-1]) if unique_dates else None,
+            "test_start": str(dataset.test_prediction_dates[0]) if dataset.test_prediction_dates else None,
+            "test_end": str(dataset.test_prediction_dates[-1]) if dataset.test_prediction_dates else None,
             "n_test_dates": n_dates,
             "metrics": metrics_to_dict(metrics),
         })

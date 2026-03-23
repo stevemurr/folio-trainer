@@ -11,15 +11,14 @@ import numpy as np
 from folio_trainer.backtest.metrics import PortfolioMetrics, compute_metrics, metrics_to_dict
 from folio_trainer.backtest.simulator import BacktestResult, simulate
 from folio_trainer.config.schema import PipelineConfig
-from folio_trainer.models.dataset import PreparedDataset
-from folio_trainer.models.direct_weight_gbm import DirectWeightGBM
+from folio_trainer.models.dataset import PreparedDataset, stack_by_date
 from folio_trainer.models.losses import batch_kl_divergence
 
 logger = logging.getLogger(__name__)
 
 
 def evaluate_holdout(
-    model: DirectWeightGBM,
+    model,
     dataset: PreparedDataset,
     test_returns: np.ndarray,
     config: PipelineConfig,
@@ -52,21 +51,14 @@ def evaluate_holdout(
     # Predict weights on test set
     test_weights = model.predict_weights(dataset.X_test, dataset.test_date_indices)
 
-    unique_test_dates = sorted(set(dataset.test_dates))
-    n_dates = min(len(unique_test_dates), test_returns.shape[0])
-    weight_matrix = np.zeros((n_dates, n_assets))
+    weight_matrix = stack_by_date(test_weights, dataset.test_date_indices, n_assets)
+    n_dates = min(len(dataset.test_prediction_dates), test_returns.shape[0])
+    weight_matrix = weight_matrix[:n_dates]
 
-    for i, d_idx in enumerate(np.unique(dataset.test_date_indices)[:n_dates]):
-        mask = dataset.test_date_indices == d_idx
-        w = test_weights[mask]
-        if len(w) >= n_assets:
-            weight_matrix[i] = w[:n_assets]
-
-    # Run backtest
     bt_result = simulate(
         weight_signals=weight_matrix,
         asset_returns=test_returns[:n_dates],
-        dates=unique_test_dates[:n_dates],
+        dates=dataset.test_prediction_dates[:n_dates],
         execution_config=config.execution,
         cost_config=config.cost_model,
         ticker_names=dataset.ticker_names,
@@ -78,7 +70,10 @@ def evaluate_holdout(
 
     # Prediction metrics
     pred_metrics = _compute_prediction_metrics(
-        test_weights, dataset.y_test, dataset.test_date_indices, n_assets,
+        test_weights,
+        dataset.target_weight_test,
+        dataset.test_date_indices,
+        n_assets,
     )
 
     # Baseline comparison
@@ -106,7 +101,8 @@ def evaluate_holdout(
         # Save test predictions
         import polars as pl
         pred_df = pl.DataFrame({
-            "date": unique_test_dates[:n_dates],
+            "asof_date": dataset.test_dates[:n_dates],
+            "prediction_date": dataset.test_prediction_dates[:n_dates],
             **{f"w_{t}": weight_matrix[:, j] for j, t in enumerate(dataset.ticker_names)},
         })
         pred_df.write_parquet(out / "predictions_test.parquet")

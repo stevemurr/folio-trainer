@@ -37,6 +37,10 @@ class DirectWeightGBM:
         y_val: np.ndarray,
         w_val: np.ndarray,
         feature_names: list[str] | None = None,
+        train_date_indices: np.ndarray | None = None,
+        val_date_indices: np.ndarray | None = None,
+        target_weights_train: np.ndarray | None = None,
+        target_weights_val: np.ndarray | None = None,
     ) -> dict:
         """Train the GBM model.
 
@@ -55,12 +59,27 @@ class DirectWeightGBM:
         """
         self.feature_names = feature_names or [f"f_{i}" for i in range(X_train.shape[1])]
 
+        train_labels = y_train
+        val_labels = y_val
+        if self.config.kind == "rank_gbm":
+            if train_date_indices is None or val_date_indices is None:
+                msg = "rank_gbm requires train_date_indices and val_date_indices."
+                raise ValueError(msg)
+            train_labels = _cross_sectional_rank_targets(
+                target_weights_train if target_weights_train is not None else y_train,
+                train_date_indices,
+            )
+            val_labels = _cross_sectional_rank_targets(
+                target_weights_val if target_weights_val is not None else y_val,
+                val_date_indices,
+            )
+
         train_data = lgb.Dataset(
-            X_train, label=y_train, weight=w_train,
+            X_train, label=train_labels, weight=w_train,
             feature_name=self.feature_names,
         )
         val_data = lgb.Dataset(
-            X_val, label=y_val, weight=w_val,
+            X_val, label=val_labels, weight=w_val,
             feature_name=self.feature_names,
             reference=train_data,
         )
@@ -176,3 +195,19 @@ class DirectWeightGBM:
         instance.model = data["model"]
         instance.feature_names = data["feature_names"]
         return instance
+
+
+def _cross_sectional_rank_targets(
+    values: np.ndarray,
+    date_indices: np.ndarray,
+) -> np.ndarray:
+    """Convert per-asset targets into per-date percentile ranks."""
+    ranks = np.zeros_like(values, dtype=np.float32)
+    for date_idx in np.unique(date_indices):
+        mask = date_indices == date_idx
+        date_values = values[mask]
+        if len(date_values) <= 1:
+            continue
+        order = np.argsort(np.argsort(date_values, kind="mergesort"), kind="mergesort")
+        ranks[mask] = order.astype(np.float32) / float(len(date_values) - 1)
+    return ranks

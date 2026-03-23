@@ -18,6 +18,8 @@ class StrategyProfileConfig(BaseModel):
     lambda_concentration: float | None = None
     distillation_temperature: float | None = None
     inference_temperature: float | None = None
+    rebalance_band: float | None = None
+    partial_rebalance_alpha: float | None = None
 
 
 BUILTIN_STRATEGY_PROFILES: dict[str, StrategyProfileConfig] = {
@@ -27,6 +29,8 @@ BUILTIN_STRATEGY_PROFILES: dict[str, StrategyProfileConfig] = {
         lambda_concentration=0.0,
         distillation_temperature=0.05,
         inference_temperature=0.20,
+        rebalance_band=0.0025,
+        partial_rebalance_alpha=0.75,
     ),
     "neutral": StrategyProfileConfig(
         lambda_turnover=0.20,
@@ -34,6 +38,8 @@ BUILTIN_STRATEGY_PROFILES: dict[str, StrategyProfileConfig] = {
         lambda_concentration=0.0,
         distillation_temperature=0.10,
         inference_temperature=0.30,
+        rebalance_band=0.005,
+        partial_rebalance_alpha=0.50,
     ),
     "conservative": StrategyProfileConfig(
         lambda_turnover=0.50,
@@ -41,6 +47,8 @@ BUILTIN_STRATEGY_PROFILES: dict[str, StrategyProfileConfig] = {
         lambda_concentration=0.30,
         distillation_temperature=0.15,
         inference_temperature=0.40,
+        rebalance_band=0.02,
+        partial_rebalance_alpha=0.25,
     ),
 }
 

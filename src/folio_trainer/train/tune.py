@@ -10,8 +10,8 @@ import optuna
 from folio_trainer.backtest.metrics import compute_metrics
 from folio_trainer.backtest.simulator import simulate
 from folio_trainer.config.schema import DirectWeightModelConfig, ExecutionConfig, CostModelConfig
-from folio_trainer.models.dataset import PreparedDataset
-from folio_trainer.models.direct_weight_gbm import DirectWeightGBM
+from folio_trainer.models.dataset import PreparedDataset, stack_by_date
+from folio_trainer.models.factory import create_direct_weight_model
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ def tune_direct_model(
             use_confidence_weights=True,
         )
 
-        model = DirectWeightGBM(model_config)
+        model = create_direct_weight_model(model_config)
 
         try:
             model.train(
@@ -75,29 +75,28 @@ def tune_direct_model(
                 y_val=dataset.y_val,
                 w_val=dataset.w_val,
                 feature_names=dataset.feature_names,
+                train_date_indices=dataset.train_date_indices,
+                val_date_indices=dataset.val_date_indices,
+                target_weights_train=dataset.target_weight_train,
+                target_weights_val=dataset.target_weight_val,
             )
         except Exception as e:
             logger.warning("Trial %d failed during training: %s", trial.number, e)
             return float("-inf")
 
-        # Predict on validation
         val_weights = model.predict_weights(dataset.X_val, dataset.val_date_indices)
-
-        n_assets = len(dataset.ticker_names)
-        unique_dates = sorted(set(dataset.val_dates))
-        n_dates = min(len(unique_dates), val_returns.shape[0])
-        weight_matrix = np.zeros((n_dates, n_assets))
-
-        for i, d_idx in enumerate(np.unique(dataset.val_date_indices)[:n_dates]):
-            mask = dataset.val_date_indices == d_idx
-            w = val_weights[mask]
-            if len(w) >= n_assets:
-                weight_matrix[i] = w[:n_assets]
+        weight_matrix = stack_by_date(
+            val_weights,
+            dataset.val_date_indices,
+            len(dataset.ticker_names),
+        )
+        n_dates = min(len(dataset.val_prediction_dates), val_returns.shape[0])
+        weight_matrix = weight_matrix[:n_dates]
 
         bt_result = simulate(
             weight_signals=weight_matrix,
             asset_returns=val_returns[:n_dates],
-            dates=unique_dates[:n_dates],
+            dates=dataset.val_prediction_dates[:n_dates],
             execution_config=execution_config,
             cost_config=cost_config,
         )

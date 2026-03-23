@@ -287,7 +287,7 @@ def predict(ctx: click.Context, tickers: str | None, pred_date: str | None, run_
     import polars as pl
 
     from folio_trainer.features.asset_features import compute_asset_features
-    from folio_trainer.models.direct_weight_gbm import DirectWeightGBM
+    from folio_trainer.models.factory import load_direct_weight_model
 
     logging.basicConfig(level=logging.WARNING)
     cfg = ctx.obj["config"]
@@ -314,7 +314,7 @@ def predict(ctx: click.Context, tickers: str | None, pred_date: str | None, run_
         return
 
     # --- Load model, preprocessor, manifest ---
-    model = DirectWeightGBM.load(run_dir / "model.bin")
+    model = load_direct_weight_model(run_dir / "model.bin")
     with open(run_dir / "preprocessor.pkl", "rb") as f:
         preproc = pickle.load(f)
     manifest = json.loads((run_dir / "feature_manifest.json").read_text())
@@ -364,6 +364,17 @@ def predict(ctx: click.Context, tickers: str | None, pred_date: str | None, run_
     # --- Compute features ---
     asset_feats = compute_asset_features(prices, cfg.features)
     target_feats = asset_feats.filter(pl.col("asof_date") == target_date)
+
+    market_feats = _try_read(data_dir / "features" / "features_market_daily.parquet")
+    cross_feats = _try_read(data_dir / "features" / "features_cross_asset_daily.parquet")
+    if market_feats is not None and len(market_feats) > 0:
+        target_market = market_feats.filter(pl.col("asof_date") == target_date)
+        if len(target_market) > 0:
+            target_feats = target_feats.join(target_market, on="asof_date", how="left")
+    if cross_feats is not None and len(cross_feats) > 0:
+        target_cross = cross_feats.filter(pl.col("asof_date") == target_date)
+        if len(target_cross) > 0:
+            target_feats = target_feats.join(target_cross, on="asof_date", how="left")
 
     if len(target_feats) == 0:
         click.echo(f"Error: No features computed for {target_date}. Need enough price history.")

@@ -154,6 +154,7 @@ def run_sequential_simulation(
         for rank_pos, cand_idx in enumerate(ranking[:candidate_config.top_k * 2]):
             candidate_rows.append({
                 "asof_date": date,
+                "prediction_date": trading_dates[i + 1],
                 "horizon_h": horizon,
                 "candidate_id": f"{date}_{cand_idx}",
                 "candidate_type": _get_candidate_type(cand_idx, len(candidate_config.deterministic_candidates)),
@@ -182,8 +183,12 @@ def run_sequential_simulation(
 
         label_rows.append({
             "asof_date": date,
+            "prediction_date": trading_dates[i + 1],
             "horizon_h": horizon,
             "prev_live_weights_json": json.dumps(prev_live_weights.tolist()),
+            "prev_target_weights_json": json.dumps(
+                (prev_target_weights if prev_target_weights is not None else prev_live_weights).tolist()
+            ),
             "hard_target_weights_json": json.dumps(hard_target.tolist()),
             "soft_target_weights_json": json.dumps(soft_target.tolist()),
             "teacher_confidence": float(confidence),
